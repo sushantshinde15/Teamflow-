@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}Report Details — TeamFlow{% endblock %}
+{% block page_title %}Report{% endblock %}
+
+{% block content %}
+<div style="max-width: 700px;">
+
+    <a href="{{ url_for('tasks.all_reports') }}" class="back-link">
+        <i class="bi bi-arrow-left"></i> Back to Reports
+    </a>
+
+    <div class="tf-card" style="padding: 30px;">
+
+        <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+            <div>
+                <span class="priority-badge badge-low" style="background:rgba(40,167,69,0.1);color:#5fbe82;border-color:rgba(40,167,69,0.25);margin-bottom:10px;display:inline-block;">
+                    Completed
+                </span>
+                <div style="font-size:1.15rem;font-weight:600;color:#eee;margin-bottom:4px;">{{ report.task.title }}</div>
+                <div style="font-size:0.78rem;color:#666;">
+                    Submitted by <strong style="color:#888;">{{ report.member.full_name }}</strong>
+                    on {{ report.submitted_at.strftime('%d %B %Y at %I:%M %p') }}
+                </div>
+            </div>
+        </div>
+
+        <div style="height:1px;background:rgba(255,255,255,0.05);margin-bottom:22px;"></div>
+
+        <div class="mb-4">
+            <div class="modal-section-label"><i class="bi bi-text-left"></i> Summary</div>
+            <p style="font-size:0.85rem;color:#777;line-height:1.65;">{{ report.summary }}</p>
+        </div>
+
+        {% if report.changes_made %}
+        <div class="mb-4">
+            <div class="modal-section-label"><i class="bi bi-pencil-square"></i> Changes Made</div>
+            <p style="font-size:0.85rem;color:#777;line-height:1.65;white-space:pre-line;">{{ report.changes_made }}</p>
+        </div>
+        {% endif %}
+
+        <div class="modal-meta-grid mt-3">
+            <div class="modal-meta-item">
+                <div class="modal-meta-key">Time Spent</div>
+                <div class="modal-meta-val">{{ report.time_taken or '—' }} <span style="font-size:0.72rem;color:#666;font-weight:400;">hrs</span></div>
+            </div>
+            <div class="modal-meta-item">
+                <div class="modal-meta-key">Submitted</div>
+                <div class="modal-meta-val">{{ report.submitted_at.strftime('%d %b %Y') }}</div>
+            </div>
+            <div class="modal-meta-item">
+                <div class="modal-meta-key">Member</div>
+                <div class="modal-meta-val">{{ report.member.full_name.split()[0] }}</div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

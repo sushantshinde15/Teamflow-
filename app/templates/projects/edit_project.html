@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Edit Project — TeamFlow{% endblock %}
+{% block page_title %}Edit Project{% endblock %}
+
+{% block content %}
+<div class="form-wrap">
+    <a href="{{ url_for('projects.view_project', id=project.id) }}" class="back-link">
+        <i class="bi bi-arrow-left"></i> Back to Project
+    </a>
+
+    <div class="section-heading">Edit Project</div>
+    <p class="section-sub">Update the project details below.</p>
+
+    <div class="tf-card" style="padding: 30px;">
+        <form method="POST" novalidate>
+            {{ form.hidden_tag() }}
+
+            <div class="mb-4">
+                <label class="form-label">Project Name *</label>
+                {{ form.name(class="form-control") }}
+                {% for e in form.name.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Description</label>
+                {{ form.description(class="form-control") }}
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Target Deadline *</label>
+                {{ form.deadline(class="form-control") }}
+                {% for e in form.deadline.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Priority</label>
+                {{ form.priority(class="form-select") }}
+            </div>
+
+            <button type="submit" class="btn-submit">
+                <i class="bi bi-check-lg me-1"></i> Save Changes
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

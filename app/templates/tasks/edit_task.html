@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block title %}Edit Task — TeamFlow{% endblock %}
+{% block page_title %}Edit Task{% endblock %}
+
+{% block content %}
+<div class="form-wrap">
+
+    <a href="{{ url_for('projects.view_project', id=task.project_id) }}" class="back-link">
+        <i class="bi bi-arrow-left"></i> Back to Project
+    </a>
+
+    <div class="section-heading">Edit Task</div>
+    <p class="section-sub">Update task details below.</p>
+
+    <div class="tf-card" style="padding: 28px;">
+        <form method="POST" novalidate>
+            {{ form.hidden_tag() }}
+
+            <div class="mb-4">
+                <label class="form-label">Task Title *</label>
+                {{ form.title(class="form-control") }}
+                {% for e in form.title.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Task Details</label>
+                {{ form.description(class="form-control") }}
+            </div>
+
+            <div class="two-col mb-4">
+                <div>
+                    <label class="form-label">Assign To</label>
+                    {{ form.assigned_to(class="form-select") }}
+                </div>
+                <div>
+                    <label class="form-label">Priority</label>
+                    {{ form.priority(class="form-select") }}
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Due Date *</label>
+                {{ form.deadline(class="form-control") }}
+                {% for e in form.deadline.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+            </div>
+
+            <button type="submit" class="btn-submit">
+                <i class="bi bi-check-lg me-1"></i> Save Changes
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Submit Report — TeamFlow{% endblock %}
+{% block page_title %}Submit Report{% endblock %}
+
+{% block content %}
+<div class="form-wrap">
+
+    <a href="{{ url_for('projects.view_project', id=task.project_id) }}" class="back-link">
+        <i class="bi bi-arrow-left"></i> Back to Project
+    </a>
+
+    <div class="section-heading">Submit Task Report</div>
+    <p class="section-sub">Document your work — this gets saved as project history.</p>
+
+    <div class="task-info-pill">
+        <i class="bi bi-clipboard-check"></i>
+        Completing: <strong>{{ task.title }}</strong>
+    </div>
+
+    <div class="tf-card" style="padding: 28px;">
+        <form method="POST" novalidate>
+            {{ form.hidden_tag() }}
+
+            <div class="mb-4">
+                <label class="form-label">What did you accomplish? *</label>
+                {{ form.summary(class="form-control", placeholder="Summarize what was done in this task...") }}
+                {% for e in form.summary.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Specific Changes Made</label>
+                {{ form.changes_made(class="form-control", placeholder="Files changed, features added, bugs fixed...") }}
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Time Spent (hours)</label>
+                {{ form.time_taken(class="form-control", placeholder="e.g. 4.5") }}
+            </div>
+
+            <button type="submit" class="btn-submit">
+                <i class="bi bi-send me-1"></i> Submit Report & Mark Complete
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+{% block title %}Messages — TeamFlow{% endblock %}
+{% block page_title %}Messages{% endblock %}
+
+{% block content %}
+<div class="chat-page">
+
+    <!-- ── LEFT: Sidebar ── -->
+    <div class="chat-sidebar">
+        <div class="chat-search">
+            <input type="text" id="chatSearch" placeholder="Search chats..." oninput="filterChats(this.value)">
+        </div>
+
+        <div class="chat-scroll">
+
+            {% if projects %}
+            <div class="chat-section-label">Group Chats</div>
+            {% for project in projects %}
+            <a href="{{ url_for('chat.group', project_id=project.id) }}"
+               class="chat-item {% if active_type == 'group' and active_id == project.id %}active{% endif %}"
+               data-name="{{ project.name|lower }}">
+                <div class="chat-item-av">{{ project.name[0].upper() }}</div>
+                <div>
+                    <div class="chat-item-name">{{ project.name }}</div>
+                    <div class="chat-item-sub">Group · {{ project.members|length }} members</div>
+                </div>
+            </a>
+            {% endfor %}
+            {% endif %}
+
+            <div class="chat-section-label" style="margin-top: 10px;">Direct Messages</div>
+            {% if teammates %}
+                {% for mate in teammates %}
+                <a href="{{ url_for('chat.dm', user_id=mate.id) }}"
+                   class="chat-item {% if active_type == 'dm' and active_id == mate.id %}active{% endif %}"
+                   data-name="{{ mate.full_name|lower }}">
+                    <div class="chat-item-av dm">{{ mate.full_name[0].upper() }}</div>
+                    <div>
+                        <div class="chat-item-name">{{ mate.full_name }}</div>
+                        <div class="chat-item-sub">{{ mate.role }}</div>
+                    </div>
+                </a>
+                {% endfor %}
+            {% else %}
+                <div style="padding: 14px 16px; font-size: 0.75rem; color: #444; text-align: center;">
+                    No teammates yet.<br>Add members to your projects first.
+                </div>
+            {% endif %}
+
+        </div>
+    </div>
+
+    <!-- ── RIGHT: Chat Area ── -->
+    <div class="chat-main">
+
+        {% if active_type == 'group' and active_project %}
+            <!-- GROUP CHAT -->
+            <div class="chat-header">
+                <div class="chat-header-av">{{ active_project.name[0].upper() }}</div>
+                <div>
+                    <div class="chat-header-name">{{ active_project.name }}</div>
+                    <div class="chat-header-sub">Group chat · {{ active_project.members|length }} members</div>
+                </div>
+                <span style="margin-left:auto; font-size:0.7rem; background:rgba(99,220,100,0.08); border:1px solid rgba(99,220,100,0.15); color:#4a9e4b; padding:3px 10px; border-radius:20px;">
+                    <i class="bi bi-circle-fill" style="font-size:6px; vertical-align:middle;"></i> Group
+                </span>
+            </div>
+
+            <div class="chat-messages" id="msgArea">
+                {% if group_messages %}
+                    {% for msg in group_messages %}
+                    <div class="msg-row {% if msg.sender_id == current_user.id %}mine{% endif %}">
+                        <div class="msg-av">{{ msg.sender.full_name[0].upper() if msg.sender else '?' }}</div>
+                        <div class="msg-body">
+                            {% if msg.sender_id != current_user.id %}
+                            <div class="msg-sender">{{ msg.sender.full_name if msg.sender else 'Unknown' }}</div>
+                            {% endif %}
+                            <div class="msg-bubble">{{ msg.content }}</div>
+                            <div class="msg-time">{{ msg.timestamp.strftime('%H:%M') }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="chat-empty-state">
+                        <i class="bi bi-chat-dots"></i>
+                        <p>No messages yet in this group.<br>Start the conversation!</p>
+                    </div>
+                {% endif %}
+                <div id="bottom"></div>
+            </div>
+
+            <form class="chat-input-bar" action="{{ url_for('chat.send_group', project_id=active_project.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="text" name="content" class="chat-input"
+                       placeholder="Message {{ active_project.name }}..." autocomplete="off" required>
+                <button type="submit" class="chat-send"><i class="bi bi-send-fill"></i></button>
+            </form>
+
+        {% elif active_type == 'dm' and dm_user %}
+            <!-- DM CHAT -->
+            <div class="chat-header">
+                <div class="chat-header-av dm">{{ dm_user.full_name[0].upper() }}</div>
+                <div>
+                    <div class="chat-header-name">{{ dm_user.full_name }}</div>
+                    <div class="chat-header-sub">{{ dm_user.role }} · Personal message</div>
+                </div>
+                <span style="margin-left:auto; font-size:0.7rem; background:rgba(79,143,255,0.08); border:1px solid rgba(79,143,255,0.18); color:#4f8fff; padding:3px 10px; border-radius:20px;">
+                    <i class="bi bi-lock" style="font-size:10px;"></i> Private
+                </span>
+            </div>
+
+            <div class="chat-messages" id="msgArea">
+                {% if dm_messages %}
+                    {% for msg in dm_messages %}
+                    <div class="msg-row {% if msg.sender_id == current_user.id %}mine{% endif %}">
+                        <div class="msg-av">{{ msg.sender.full_name[0].upper() }}</div>
+                        <div class="msg-body">
+                            {% if msg.sender_id != current_user.id %}
+                            <div class="msg-sender">{{ msg.sender.full_name }}</div>
+                            {% endif %}
+                            <div class="msg-bubble">{{ msg.content }}</div>
+                            <div class="msg-time">{{ msg.timestamp.strftime('%b %d, %H:%M') }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="chat-empty-state">
+                        <i class="bi bi-chat-dots"></i>
+                        <p>No messages yet.<br>Say hello to {{ dm_user.full_name.split(' ')[0] }}!</p>
+                    </div>
+                {% endif %}
+                <div id="bottom"></div>
+            </div>
+
+            <form class="chat-input-bar" action="{{ url_for('chat.send_dm', user_id=dm_user.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="text" name="content" class="chat-input"
+                       placeholder="Message {{ dm_user.full_name.split(' ')[0] }}..." autocomplete="off" required>
+                <button type="submit" class="chat-send"><i class="bi bi-send-fill"></i></button>
+            </form>
+
+        {% else %}
+            <!-- NOTHING SELECTED -->
+            <div class="chat-no-select">
+                <i class="bi bi-chat-square-dots"></i>
+                <h5>Select a conversation</h5>
+                <p>Pick a group chat or teammate from the left to start messaging.</p>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+
+<script>
+    const msgArea = document.getElementById('msgArea');
+    if (msgArea) msgArea.scrollTop = msgArea.scrollHeight;
+
+    function filterChats(q) {
+        document.querySelectorAll('.chat-item').forEach(el => {
+            el.style.display = el.dataset.name.includes(q.toLowerCase()) ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}

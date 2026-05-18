@@ -1,0 +1,760 @@
+{% extends 'base.html' %}
+{% block title %}{{ project.name }} — TeamFlow{% endblock %}
+{% block page_title %}{{ project.name }}{% endblock %}
+
+{% block content %}
+
+<!-- ═══ Project Hero ═══ -->
+<div class="project-hero">
+    <div class="hero-top">
+        <div>
+            <div class="hero-title">{{ project.name }}</div>
+            <p class="hero-desc">{{ project.description or 'No description provided.' }}</p>
+        </div>
+        <div class="d-flex align-items-start gap-2 flex-wrap">
+            <span class="priority-badge badge-{{ project.priority|lower }}">{{ project.priority }}</span>
+            {% if current_user.role == 'Admin' %}
+            <a href="{{ url_for('projects.edit_project', id=project.id) }}" class="mini-btn mini-btn-primary">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            {% if project.status != 'Completed' %}
+            <form action="{{ url_for('projects.complete_project', id=project.id) }}" method="POST"
+                  onsubmit="return confirm('Mark this entire project as completed? All remaining tasks will be closed.')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="mini-btn" style="background:rgba(40,167,69,0.12);border-color:rgba(40,167,69,0.3);color:#5fbe82;">
+                    <i class="bi bi-check2-all"></i> Mark Complete
+                </button>
+            </form>
+            {% else %}
+            <span class="mini-btn" style="background:rgba(40,167,69,0.1);border-color:rgba(40,167,69,0.25);color:#5fbe82;cursor:default;">
+                <i class="bi bi-check2-all"></i> Completed
+            </span>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+    <div class="hero-meta">
+        <div><div class="hero-stat-val">{{ project.members|length }}</div><div class="hero-stat-label">Members</div></div>
+        <div><div class="hero-stat-val">{{ tasks|length }}</div><div class="hero-stat-label">Tasks</div></div>
+        <div><div class="hero-stat-val">{{ progress }}%</div><div class="hero-stat-label">Complete</div></div>
+        <div><div class="hero-stat-val">{{ project.deadline.strftime('%b %d') if project.deadline else '—' }}</div><div class="hero-stat-label">Deadline</div></div>
+    </div>
+    <div class="hero-progress"><div class="hero-progress-fill" style="width:{{ progress }}%"></div></div>
+</div>
+
+<!-- ═══ Tabs ═══ -->
+<div class="project-tabs">
+    <button class="tab-btn {% if active_tab == 'kanban' %}active{% endif %}" onclick="switchTab('kanban', this)">
+        <i class="bi bi-kanban"></i> Kanban Board
+    </button>
+    <button class="tab-btn {% if active_tab == 'analytics' %}active{% endif %}" onclick="switchTab('analytics', this)">
+        <i class="bi bi-bar-chart-line"></i> Analytics
+    </button>
+    <button class="tab-btn {% if active_tab == 'chat' %}active{% endif %}" onclick="switchTab('chat', this)">
+        <i class="bi bi-chat-dots"></i> Team Chat
+    </button>
+    <button class="tab-btn {% if active_tab == 'members' %}active{% endif %}" onclick="switchTab('members', this)">
+        <i class="bi bi-people"></i> Members
+    </button>
+</div>
+
+<!-- ══════════════════════════════════════
+     TAB 1 — KANBAN BOARD
+══════════════════════════════════════ -->
+<div class="tab-panel {% if active_tab == 'kanban' %}active{% endif %}" id="tab-kanban">
+
+    {% if current_user.role == 'Admin' %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div style="font-size:0.78rem; color:#2a2a2a;">Drag cards between columns to update status</div>
+        <a href="{{ url_for('tasks.create_task', project_id=project.id) }}" class="mini-btn mini-btn-primary">
+            <i class="bi bi-plus-lg"></i> Add Task
+        </a>
+    </div>
+    {% endif %}
+
+    <div class="kanban-wrapper">
+        {% set columns = [
+            ('To Do',       'todo',        '#3a3a3a', 'bi-circle'),
+            ('In Progress', 'in-progress', '#4f8fff', 'bi-arrow-repeat'),
+            ('Review',      'review',      '#d4a820', 'bi-eye'),
+            ('Completed',   'completed',   '#63dc64', 'bi-check-circle'),
+            ('Overdue',     'overdue',     '#e06070', 'bi-exclamation-circle')
+        ] %}
+
+        {% for col_name, col_id, col_color, col_icon in columns %}
+        {% set col_tasks = tasks_by_status.get(col_name, []) %}
+        <div class="kanban-col" data-col="{{ col_id }}">
+            <div class="kanban-col-header">
+                <div class="col-label">
+                    <i class="bi {{ col_icon }}" style="color: {{ col_color }}; font-size: 0.8rem;"></i>
+                    <span style="color: #666; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px;">{{ col_name }}</span>
+                </div>
+                <span class="col-count" id="cnt-{{ col_id }}">{{ col_tasks|length }}</span>
+            </div>
+
+            <div class="kanban-drop-zone"
+                 id="col-{{ col_id }}"
+                 data-status="{{ col_name }}"
+                 ondragover="onDragOver(event)"
+                 ondragleave="onDragLeave(event)"
+                 ondrop="onDrop(event, '{{ col_name }}')">
+
+                {% for task in col_tasks %}
+                {% set can_act = (current_user.role == 'Admin' or task.assigned_to == current_user.id) %}
+                <div class="task-card prio-{{ task.priority|lower if task.priority else 'low' }}"
+                     id="task-{{ task.id }}"
+                     draggable="{{ 'true' if can_act else 'false' }}"
+                     ondragstart="onDragStart(event, {{ task.id }})"
+                     onclick="openTaskModal({{ task.id }})">
+
+                    <div class="task-card-top">
+                        <span class="task-title-text">{{ task.title }}</span>
+                        <span class="task-prio-badge prio-badge-{{ task.priority|lower if task.priority else 'low' }}">
+                            {{ task.priority or 'Low' }}
+                        </span>
+                    </div>
+
+                    {% if task.description %}
+                    <div class="task-desc-text">{{ task.description }}</div>
+                    {% endif %}
+
+                    <div class="task-card-footer">
+                        <div class="task-assignee-chip">
+                            {% if task.assignee %}
+                            <div class="task-mini-avatar">{{ task.assignee.full_name[0].upper() }}</div>
+                            <span>{{ task.assignee.full_name.split(' ')[0] }}</span>
+                            {% else %}
+                            <span style="color:#1e1e1e;">Unassigned</span>
+                            {% endif %}
+                        </div>
+
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            {% if task.files %}
+                            <span class="task-files-badge" title="{{ task.files|length }} file(s)">
+                                <i class="bi bi-paperclip"></i>{{ task.files|length }}
+                            </span>
+                            {% endif %}
+
+                            {% if task.deadline %}
+                            <span class="task-deadline-chip {% if task.deadline < today %}overdue{% endif %}">
+                                <i class="bi bi-calendar3"></i>{{ task.deadline.strftime('%b %d') }}
+                            </span>
+                            {% endif %}
+
+                            {% if can_act %}
+                            <button class="card-upload-btn"
+                                    onclick="event.stopPropagation(); quickUpload({{ task.id }}, '{{ url_for('tasks.upload_file', task_id=task.id) }}')"
+                                    title="Upload files">
+                                <i class="bi bi-upload"></i> Upload
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% if not col_tasks %}
+                <div class="kanban-empty">
+                    <i class="bi bi-inbox"></i>
+                    Empty
+                </div>
+                {% endif %}
+
+                {% if col_name == 'To Do' and current_user.role == 'Admin' %}
+                <a href="{{ url_for('tasks.create_task', project_id=project.id) }}" class="kanban-add-btn">
+                    <i class="bi bi-plus"></i> Add task
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <input type="file" id="quickUploadInput" multiple style="display:none;" onchange="handleQuickUpload(event)">
+</div>
+
+
+<!-- ══════════════════════════════════════
+     TAB 2 — ANALYTICS
+══════════════════════════════════════ -->
+<div class="tab-panel {% if active_tab == 'analytics' %}active{% endif %}" id="tab-analytics">
+
+    <div class="kpi-row">
+        <div class="kpi-card">
+            <div class="kpi-val">{{ tasks|length }}</div>
+            <div class="kpi-label">Total Tasks</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-val" style="color:#63dc64;">{{ status_counts.get('Completed', 0) }}</div>
+            <div class="kpi-label">Completed</div>
+            <div class="kpi-sub">{{ progress }}% done</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-val" style="color:#e06070;">{{ status_counts.get('Overdue', 0) }}</div>
+            <div class="kpi-label">Overdue</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-val" style="color:#4f8fff;">{{ status_counts.get('In Progress', 0) }}</div>
+            <div class="kpi-label">In Progress</div>
+        </div>
+    </div>
+
+    <div class="analytics-grid">
+        <div class="chart-card">
+            <div class="chart-title"><i class="bi bi-pie-chart-fill"></i> Task Status Breakdown</div>
+            <canvas id="chartStatusDonut"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title"><i class="bi bi-graph-up"></i> Task Completion Progress</div>
+            <canvas id="chartProgressLine"></canvas>
+        </div>
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     TAB 3 — TEAM CHAT
+══════════════════════════════════════ -->
+<div class="tab-panel {% if active_tab == 'chat' %}active{% endif %}" id="tab-chat">
+    <div class="chat-wrap">
+        <div class="chat-messages-area" id="chatArea">
+            {% if chat_messages %}
+                {% for msg in chat_messages %}
+                <div class="chat-msg {% if msg.sender_id == current_user.id %}mine{% endif %}">
+                    <div class="chat-av">{{ msg.sender.full_name[0].upper() if msg.sender else '?' }}</div>
+                    <div>
+                        {% if msg.sender_id != current_user.id %}
+                        <div class="chat-sender">{{ msg.sender.full_name if msg.sender else 'Unknown' }}</div>
+                        {% endif %}
+                        <div class="chat-bubble">{{ msg.content }}</div>
+                        <div class="chat-meta">{{ msg.timestamp.strftime('%b %d, %H:%M') }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="chat-empty">
+                    <i class="bi bi-chat-dots"></i>
+                    No messages yet. Start the conversation!
+                </div>
+            {% endif %}
+            <div id="chat-bottom"></div>
+        </div>
+
+        <form class="chat-input-bar" action="{{ url_for('projects.send_chat', id=project.id) }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="content" class="chat-input" placeholder="Type a message..." autocomplete="off" required>
+            <button type="submit" class="chat-send-btn"><i class="bi bi-send-fill"></i></button>
+        </form>
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     TAB 4 — MEMBERS
+══════════════════════════════════════ -->
+<div class="tab-panel {% if active_tab == 'members' %}active{% endif %}" id="tab-members">
+    <div style="max-width: 560px;">
+        <div class="sidebar-panel">
+            <div class="sp-title"><i class="bi bi-people"></i> Team Members ({{ project.members|length }})</div>
+
+            {% for mem in project.members %}
+            <div class="member-chip" style="padding: 10px 0; align-items:center;">
+                <div class="m-av">{{ mem.user.full_name[0].upper() }}</div>
+                <div style="flex:1;">
+                    <div class="m-nm" style="font-size:0.85rem; color:#888;">{{ mem.user.full_name }}</div>
+                    <div class="m-rl">{{ mem.user.role }} · {{ mem.user.email }}</div>
+                </div>
+                {% if current_user.role == 'Admin' %}
+                <form action="{{ url_for('projects.remove_member', id=project.id, user_id=mem.user.id) }}" method="POST"
+                      onsubmit="return confirm('Remove {{ mem.user.full_name }}?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="remove-member-btn"><i class="bi bi-x"></i> Remove</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            {% if not project.members %}
+            <div style="font-size:0.8rem; color:#1e1e1e; text-align:center; padding: 20px 0;">No members yet</div>
+            {% endif %}
+
+            {% if current_user.role == 'Admin' %}
+            <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.05);">
+                <div style="font-size:0.72rem; color:#2a2a2a; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">Add Member</div>
+                <form action="{{ url_for('projects.add_member', id=project.id) }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="inline-form">
+                        <input type="email" name="email" class="inline-input" placeholder="member@company.com" required>
+                        <button type="submit" class="btn-add-member">Add</button>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+
+
+     TASK DETAIL MODAL
+
+<div class="modal-overlay" id="taskModal" onclick="closeModalOutside(event)">
+    <div class="modal-box">
+        <div class="modal-header">
+            <div>
+                <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.7px; color:#2a2a2a; margin-bottom:5px;" id="modalStatus">—</div>
+                <div class="modal-title" id="modalTitle">Loading...</div>
+            </div>
+            <button class="modal-close" onclick="closeModal()"><i class="bi bi-x"></i></button>
+        </div>
+
+        <div class="modal-body">
+            <div class="modal-section">
+                <div class="modal-section-label"><i class="bi bi-text-left"></i> Description</div>
+                <div class="modal-desc" id="modalDesc">—</div>
+            </div>
+
+            <div class="modal-section">
+                <div class="modal-meta-grid">
+                    <div class="modal-meta-item">
+                        <div class="modal-meta-key">Assigned To</div>
+                        <div class="modal-meta-val" id="modalAssignee">—</div>
+                    </div>
+                    <div class="modal-meta-item">
+                        <div class="modal-meta-key">Priority</div>
+                        <div class="modal-meta-val" id="modalPriority">—</div>
+                    </div>
+                    <div class="modal-meta-item">
+                        <div class="modal-meta-key">Due Date</div>
+                        <div class="modal-meta-val" id="modalDeadline">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <div class="modal-section-label"><i class="bi bi-paperclip"></i> Files & Attachments</div>
+                <div class="file-list" id="fileList">
+                    <div style="font-size:0.78rem; color:#2a2a2a; padding: 10px 0;">No files yet.</div>
+                </div>
+            </div>
+
+            <div class="modal-section" id="uploadSection" style="display:none;">
+                <div class="modal-section-label"><i class="bi bi-cloud-upload"></i> Upload Work</div>
+                <div class="upload-zone" id="uploadZone" onclick="document.getElementById('modalFileInput').click()"
+                     ondragover="uploadDragOver(event)" ondragleave="uploadDragLeave(event)" ondrop="uploadDrop(event)">
+                    <i class="bi bi-cloud-arrow-up"></i>
+                    <p>Drag & drop files here</p>
+                    <span>or click to browse</span>
+                </div>
+                <div class="upload-progress-bar" id="uploadProgressBar">
+                    <div class="upload-progress-fill" id="uploadProgressFill"></div>
+                </div>
+                <input type="file" id="modalFileInput" multiple onchange="handleFileSelect(event)">
+                <div id="uploadStatus" style="font-size:0.74rem; color:#2a2a2a; margin-top:6px;"></div>
+            </div>
+        </div>
+
+        <div class="modal-action-row" id="modalActions"></div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ══════════════════════════════════════
+//  TAB SWITCHING
+// ══════════════════════════════════════
+function switchTab(name, btn) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    btn.classList.add('active');
+    if (name === 'analytics') initCharts();
+    if (name === 'chat') scrollChatBottom();
+}
+
+
+
+
+function persistMove(taskId, newStatus) {
+    const csrfToken = '{{ csrf_token() }}';
+    fetch('/task/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ task_id: taskId, new_status: newStatus })
+    }).then(r => r.json()).then(d => {
+        if (!d.success) { alert('Could not move task. You may not have permission.'); location.reload(); }
+    }).catch(() => location.reload());
+}
+
+function showCompletionModal(taskId) {
+    let overlay = document.getElementById('completeOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'completeOverlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(5px);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
+        document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = `
+        <div style="background:linear-gradient(155deg,rgba(20,20,20,0.99),rgba(12,12,12,1));border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px 30px;max-width:420px;width:100%;box-shadow:0 30px 80px rgba(0,0,0,0.8);border-top:2px solid #63dc64;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                <i class="bi bi-check-circle" style="color:#63dc64;font-size:1.2rem;"></i>
+                <span style="font-size:1rem;font-weight:600;color:#eee;">Mark as Completed</span>
+            </div>
+            <p style="font-size:0.8rem;color:#444;margin-bottom:18px;">Add a quick note about what was done (optional).</p>
+            <textarea id="completeSummary" placeholder="What was accomplished? Leave blank to auto-complete." style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:9px;color:#ccc;padding:10px 13px;font-size:0.83rem;font-family:'DM Sans',sans-serif;resize:vertical;min-height:75px;outline:none;box-sizing:border-box;"></textarea>
+            <div style="display:flex;gap:9px;margin-top:14px;">
+                <button onclick="submitCompletion(${taskId})" style="flex:1;padding:10px;background:linear-gradient(135deg,#28a745,#1e7e34);border:none;border-radius:9px;color:#fff;font-size:0.84rem;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;">
+                    <i class="bi bi-check2-circle"></i> Confirm Complete
+                </button>
+                <button onclick="cancelCompletion(${taskId})" style="padding:10px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:9px;color:#555;font-size:0.84rem;font-family:'DM Sans',sans-serif;cursor:pointer;">
+                    Cancel
+                </button>
+            </div>
+        </div>`;
+    overlay.style.display = 'flex';
+}
+
+function submitCompletion(taskId) {
+    document.getElementById('completeOverlay').style.display = 'none';
+    persistMove(taskId, 'Completed');
+    showToast('✓ Task marked as completed!');
+}
+
+function cancelCompletion(taskId) {
+    document.getElementById('completeOverlay').style.display = 'none';
+    location.reload();
+}
+
+
+// UPLOAD CARD BUTTON
+
+let quickUploadTaskId = null;
+let quickUploadUrl = null;
+
+function quickUpload(taskId, uploadUrl) {
+    quickUploadTaskId = taskId;
+    quickUploadUrl = uploadUrl;
+    const input = document.getElementById('quickUploadInput');
+    input.value = '';
+    input.click();
+}
+
+function handleQuickUpload(e) {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !quickUploadUrl) return;
+
+    Array.from(files).forEach(file => {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('csrf_token', '{{ csrf_token() }}');
+
+        fetch(quickUploadUrl, { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    const card = document.getElementById('task-' + quickUploadTaskId);
+                    if (card) {
+                        let badge = card.querySelector('.task-files-badge');
+                        if (badge) {
+                            const cur = parseInt(badge.textContent.trim()) || 0;
+                            badge.innerHTML = `<i class="bi bi-paperclip"></i>${cur + 1}`;
+                        } else {
+                            const footer = card.querySelector('.task-card-footer > div:last-child');
+                            if (footer) {
+                                const b = document.createElement('span');
+                                b.className = 'task-files-badge';
+                                b.innerHTML = `<i class="bi bi-paperclip"></i>1`;
+                                footer.insertBefore(b, footer.firstChild);
+                            }
+                        }
+                    }
+                    showToast(`✓ ${data.file.original_name} uploaded`);
+                } else {
+                    showToast(`✗ ${data.error || 'Upload failed'}`, true);
+                }
+            })
+            .catch(() => showToast('✗ Upload failed', true));
+    });
+}
+
+function showToast(msg, isError) {
+    let t = document.getElementById('kanbanToast');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'kanbanToast';
+        t.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:10px 16px;border-radius:9px;font-size:0.8rem;font-family:"DM Sans",sans-serif;z-index:9999;transition:opacity 0.3s;';
+        document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.background = isError ? 'rgba(220,53,69,0.18)' : 'rgba(40,167,69,0.18)';
+    t.style.color = isError ? '#e07070' : '#5fbe82';
+    t.style.border = isError ? '1px solid rgba(220,53,69,0.3)' : '1px solid rgba(40,167,69,0.3)';
+    t.style.opacity = '1';
+    setTimeout(() => { t.style.opacity = '0'; }, 3000);
+}
+
+
+//  DRAG  DROP
+
+let draggedId = null;
+
+function onDragStart(e, taskId) {
+    draggedId = taskId;
+    document.getElementById('task-' + taskId).classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function onDragOver(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('drag-over');
+}
+
+function onDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+}
+
+function onDrop(e, newStatus) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+
+    if (!draggedId) return;
+
+    const card = document.getElementById('task-' + draggedId);
+    if (!card) return;
+
+    e.currentTarget.appendChild(card);
+    card.classList.remove('dragging');
+    updateCounts();
+
+    if (newStatus === 'Completed') {
+        showCompletionModal(draggedId, newStatus);
+        draggedId = null;
+        return;
+    }
+
+    persistMove(draggedId, newStatus);
+    draggedId = null;
+}
+
+document.addEventListener('dragend', () => {
+    document.querySelectorAll('.task-card').forEach(c => c.classList.remove('dragging'));
+    document.querySelectorAll('.kanban-drop-zone').forEach(z => z.classList.remove('drag-over'));
+});
+
+function updateCounts() {
+    document.querySelectorAll('.kanban-drop-zone').forEach(zone => {
+        const status = zone.dataset.status;
+        const colId = status.toLowerCase().replace(/ /g, '-');
+        const cnt = zone.querySelectorAll('.task-card').length;
+        const el = document.getElementById('cnt-' + colId);
+        if (el) el.textContent = cnt;
+    });
+}
+
+
+//  TASK DETAIL 
+
+let currentTaskId = null;
+let currentUploadUrl = null;
+
+function openTaskModal(taskId) {
+    currentTaskId = taskId;
+    document.getElementById('taskModal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    document.getElementById('modalTitle').textContent = 'Loading...';
+    document.getElementById('modalDesc').textContent = '...';
+    document.getElementById('fileList').innerHTML = '<div style="font-size:0.78rem;color:#2a2a2a;padding:10px 0;">Loading...</div>';
+    document.getElementById('modalActions').innerHTML = '';
+    document.getElementById('uploadSection').style.display = 'none';
+
+    fetch(`/task/${taskId}/detail`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('modalTitle').textContent = data.title;
+            document.getElementById('modalStatus').textContent = data.status;
+            document.getElementById('modalDesc').textContent = data.description || 'No description provided.';
+            document.getElementById('modalAssignee').textContent = data.assignee;
+            document.getElementById('modalPriority').textContent = data.priority;
+            document.getElementById('modalDeadline').textContent = data.deadline;
+
+            renderFileList(data.files);
+
+            if (data.can_upload) {
+                currentUploadUrl = data.upload_url;
+                document.getElementById('uploadSection').style.display = 'block';
+            } else {
+                document.getElementById('uploadSection').style.display = 'none';
+            }
+
+            let actions = '';
+            if (data.can_upload) {
+                actions += `<a href="${data.report_url}" class="btn-modal-action btn-complete"><i class="bi bi-check2-circle"></i> Mark Complete</a>`;
+            }
+            if (data.can_edit) {
+                actions += `<a href="${data.edit_url}" class="btn-modal-action btn-edit-task"><i class="bi bi-pencil"></i> Edit Task</a>`;
+            }
+            document.getElementById('modalActions').innerHTML = actions;
+        })
+        .catch(() => {
+            document.getElementById('modalTitle').textContent = 'Error loading task';
+        });
+}
+
+function renderFileList(files) {
+    const container = document.getElementById('fileList');
+    if (!files || files.length === 0) {
+        container.innerHTML = '<div style="font-size:0.78rem;color:#666;padding:10px 0;">No files attached yet.</div>';
+        return;
+    }
+    container.innerHTML = files.map(f => `
+        <div class="file-row">
+            <div class="file-icon"><i class="bi bi-file-earmark"></i></div>
+            <div class="file-info">
+                <div class="file-name" title="${f.original_name}">${f.original_name}</div>
+                <div class="file-meta">${f.uploaded_by} · ${f.uploaded_at} · ${f.file_size}</div>
+            </div>
+            <a href="${f.download_url}" class="file-download">
+                <i class="bi bi-download"></i> Download
+            </a>
+        </div>
+    `).join('');
+}
+
+function closeModal() {
+    document.getElementById('taskModal').classList.remove('open');
+    document.body.style.overflow = '';
+    currentTaskId = null;
+    currentUploadUrl = null;
+}
+
+function closeModalOutside(e) {
+    if (e.target === document.getElementById('taskModal')) closeModal();
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+
+//  FILE UPLOAD PART
+
+function uploadDragOver(e) { e.preventDefault(); document.getElementById('uploadZone').classList.add('drag-active'); }
+function uploadDragLeave(e) { document.getElementById('uploadZone').classList.remove('drag-active'); }
+function uploadDrop(e) { e.preventDefault(); document.getElementById('uploadZone').classList.remove('drag-active'); uploadFiles(e.dataTransfer.files); }
+function handleFileSelect(e) { uploadFiles(e.target.files); }
+
+function uploadFiles(files) {
+    if (!files || files.length === 0 || !currentUploadUrl) return;
+    const status = document.getElementById('uploadStatus');
+    const bar = document.getElementById('uploadProgressBar');
+    const fill = document.getElementById('uploadProgressFill');
+
+    let done = 0;
+    const total = files.length;
+    bar.style.display = 'block';
+    fill.style.width = '0%';
+
+    Array.from(files).forEach(file => {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('csrf_token', '{{ csrf_token() }}');
+        status.textContent = `Uploading ${file.name}...`;
+
+        fetch(currentUploadUrl, { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                done++;
+                fill.style.width = ((done / total) * 100) + '%';
+                if (data.success) {
+                    const existing = document.getElementById('fileList');
+                    if (existing.querySelector('[style]')) existing.innerHTML = '';
+                    const row = document.createElement('div');
+                    row.className = 'file-row';
+                    row.innerHTML = `
+                        <div class="file-icon"><i class="bi bi-file-earmark"></i></div>
+                        <div class="file-info">
+                            <div class="file-name">${data.file.original_name}</div>
+                            <div class="file-meta">${data.file.uploaded_by} · ${data.file.uploaded_at} · ${data.file.file_size}</div>
+                        </div>
+                        <a href="${data.file.download_url}" class="file-download" download>
+                            <i class="bi bi-download"></i> Download
+                        </a>`;
+                    document.getElementById('fileList').appendChild(row);
+                    status.textContent = `✓ ${data.file.original_name} uploaded`;
+                } else {
+                    status.textContent = `✗ Error: ${data.error}`;
+                }
+                if (done === total) { setTimeout(() => { bar.style.display = 'none'; }, 1200); }
+            })
+            .catch(() => { status.textContent = '✗ Upload failed'; });
+    });
+}
+
+
+//  CHAT
+
+function scrollChatBottom() {
+    const el = document.getElementById('chatArea');
+    if (el) el.scrollTop = el.scrollHeight;
+}
+{% if active_tab == 'chat' %}
+window.addEventListener('load', scrollChatBottom);
+{% endif %}
+
+
+//  ANALYTICS CHARTS
+
+var chartsInited = false;
+var statusData   = {{ status_counts | tojson }};
+var priorityData = {{ priority_counts | tojson }};
+var workloadData = {{ member_workload | tojson }};
+var weeklyData   = {{ weekly_completion | tojson }};
+var progressVal  = {{ progress }};
+
+Chart.defaults.color = '#333';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+
+const STATUS_COLORS = {
+    'To Do': '#3a3a3a', 'In Progress': '#4f8fff',
+    'Review': '#d4a820', 'Completed': '#63dc64', 'Overdue': '#e06070'
+};
+
+function initCharts() {
+    ['chartStatusDonut','chartProgressLine'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { const ex = Chart.getChart(el); if (ex) ex.destroy(); }
+    });
+
+    const statuses = Object.keys(statusData);
+    const stCounts = Object.values(statusData);
+    const stColors = statuses.map(s => STATUS_COLORS[s] || '#555');
+
+    new Chart(document.getElementById('chartStatusDonut'), {
+        type: 'doughnut',
+        data: { labels: statuses, datasets: [{ data: stCounts, backgroundColor: stColors, borderWidth: 0, hoverOffset: 6 }] },
+        options: { cutout: '68%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 14, color: '#888', font: { size: 11 } } } } }
+    });
+
+    const weeklyLabels = Object.keys(weeklyData);
+    const weeklyCounts = Object.values(weeklyData);
+    const trendLabels = weeklyLabels.length > 0 ? weeklyLabels : ['No data'];
+    const trendData   = weeklyCounts.length > 0 ? weeklyCounts : [0];
+
+    new Chart(document.getElementById('chartProgressLine'), {
+        type: 'line',
+        data: {
+            labels: trendLabels,
+            datasets: [{ label: 'Tasks Completed', data: trendData, borderColor: '#4f8fff', backgroundColor: 'rgba(79,143,255,0.08)', tension: 0.45, fill: true, pointBackgroundColor: '#4f8fff', pointRadius: 4, pointHoverRadius: 6 }]
+        },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0, color: '#777' }, grid: { color: 'rgba(255,255,255,0.04)' } }, x: { ticks: { color: '#777' }, grid: { display: false } } } }
+    });
+}
+
+{% if active_tab == 'analytics' %}
+window.addEventListener('load', initCharts);
+{% endif %}
+</script>
+{% endblock %}

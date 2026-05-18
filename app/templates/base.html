@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}TeamFlow{% endblock %}</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/teamflow.css') }}">
+
+    <!-- Apply saved theme BEFORE first paint to prevent flash -->
+    <script>
+        if (localStorage.getItem('tf_theme') === 'light') {
+            document.documentElement.style.visibility = 'hidden';
+        }
+    </script>
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="app-page">
+
+<!-- Apply light class immediately to body before render -->
+<script>
+    if (localStorage.getItem('tf_theme') === 'light') {
+        document.body.classList.add('light');
+    }
+    document.documentElement.style.visibility = '';
+</script>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+    <a href="{{ url_for('main.dashboard') }}" class="sidebar-brand">
+        <div class="logo-text">Team<span>Flow</span></div>
+        <div class="logo-sub">Workspace</div>
+    </a>
+
+    <nav class="sidebar-nav">
+        <p class="nav-section-label">Main</p>
+
+        <a href="{{ url_for('main.dashboard') }}" class="sidebar-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}">
+            <i class="bi bi-grid-1x2"></i> Dashboard
+        </a>
+
+        <a href="{{ url_for('projects.list_projects') }}" class="sidebar-link {% if 'project' in (request.endpoint or '') %}active{% endif %}">
+            <i class="bi bi-folder2-open"></i> Projects
+        </a>
+
+        <a href="{{ url_for('chat.index') }}" class="sidebar-link {% if 'chat' in (request.endpoint or '') %}active{% endif %}">
+            <i class="bi bi-chat-dots"></i> Messages
+        </a>
+    </nav>
+
+    <div class="sidebar-user">
+        <div class="user-chip">
+            <div class="user-avatar">{{ current_user.full_name[0].upper() }}</div>
+            <div>
+                <div class="user-name">{{ current_user.full_name.split(' ')[0] }}</div>
+                <div class="user-role">{{ current_user.role }}</div>
+            </div>
+            <a href="{{ url_for('auth.logout') }}" class="ms-auto topbar-icon-btn" title="Logout">
+                <i class="bi bi-box-arrow-right"></i>
+            </a>
+        </div>
+    </div>
+</aside>
+
+<!-- Main -->
+<div class="main-wrapper">
+    <header class="topbar">
+        <div class="topbar-title">
+            TeamFlow &nbsp;<span>/ {% block page_title %}Dashboard{% endblock %}</span>
+        </div>
+        <div class="topbar-actions">
+
+            <!-- Theme Toggle Button -->
+            <button class="topbar-icon-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle light / dark mode">
+                <i class="bi bi-sun" id="themeIcon"></i>
+            </button>
+
+            {% if current_user.role == 'Admin' %}
+            <a href="{{ url_for('projects.new_project') }}" class="topbar-icon-btn" title="New Project">
+                <i class="bi bi-plus-lg"></i>
+            </a>
+            {% endif %}
+        </div>
+    </header>
+
+    <main class="page-body">
+        <div class="flash-container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} d-flex align-items-center gap-2">
+                            <i class="bi bi-dot"></i>{{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+        </div>
+
+        {% block content %}{% endblock %}
+    </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    const icon = document.getElementById('themeIcon');
+
+    function applyTheme(theme) {
+        if (theme === 'light') {
+            document.body.classList.add('light');
+            icon.className = 'bi bi-moon';
+        } else {
+            document.body.classList.remove('light');
+            icon.className = 'bi bi-sun';
+        }
+    }
+
+    function toggleTheme() {
+        const next = document.body.classList.contains('light') ? 'dark' : 'light';
+        localStorage.setItem('tf_theme', next);
+        applyTheme(next);
+    }
+
+    // Sync icon on load
+    applyTheme(localStorage.getItem('tf_theme') || 'dark');
+</script>
+
+{% block extra_js %}{% endblock %}
+</body>
+</html>

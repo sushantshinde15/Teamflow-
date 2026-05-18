@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — TeamFlow</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/teamflow.css') }}">
+
+    <script>
+        if (localStorage.getItem('tf_theme') === 'light') {
+            document.documentElement.style.visibility = 'hidden';
+        }
+    </script>
+</head>
+<body class="auth-page">
+
+<script>
+    if (localStorage.getItem('tf_theme') === 'light') {
+        document.body.classList.add('light');
+    }
+    document.documentElement.style.visibility = '';
+</script>
+
+<div class="page-wrapper">
+
+    <div class="brand-area">
+        <a href="#" class="brand-logo">Team<span>Flow</span></a>
+        <p class="brand-tagline">Organize teams. Track progress. Deliver faster.</p>
+    </div>
+
+    <div class="auth-card">
+        <h2>Welcome back</h2>
+        <p class="sub-text">Sign in to your workspace</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        <i class="bi bi-dot me-1"></i>{{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('auth.login') }}" novalidate>
+            {{ form.hidden_tag() }}
+
+            <div class="mb-3">
+                <label class="form-label">Company Email</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                    {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""), placeholder="you@company.com") }}
+                </div>
+                {% for err in form.email.errors %}
+                    <div class="invalid-feedback d-block">{{ err }}</div>
+                {% endfor %}
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Password</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                    {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""), placeholder="••••••••") }}
+                </div>
+                {% for err in form.password.errors %}
+                    <div class="invalid-feedback d-block">{{ err }}</div>
+                {% endfor %}
+            </div>
+
+            <button type="submit" class="btn-login">
+                Sign In &nbsp;<i class="bi bi-arrow-right-short"></i>
+            </button>
+        </form>
+
+        <div class="divider-line">or</div>
+
+        <p class="bottom-link">
+            New here? <a href="{{ url_for('auth.register') }}">Create an account</a>
+        </p>
+    </div>
+
+    <div class="marketing-strip">
+        <span class="feature-pill"><i class="bi bi-kanban"></i> Kanban Boards</span>
+        <span class="feature-pill"><i class="bi bi-chat-dots"></i> Team Chat</span>
+        <span class="feature-pill"><i class="bi bi-bar-chart"></i> Analytics</span>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

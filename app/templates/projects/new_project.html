@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}New Project — TeamFlow{% endblock %}
+{% block page_title %}New Project{% endblock %}
+
+{% block content %}
+<div class="form-wrap">
+
+    <a href="{{ url_for('projects.list_projects') }}" class="back-link">
+        <i class="bi bi-arrow-left"></i> Back to Projects
+    </a>
+
+    <div class="section-heading">Launch a New Project</div>
+    <p class="section-sub">Fill in the details and get your team started.</p>
+
+    <div class="tf-card" style="padding: 30px;">
+        <form method="POST" novalidate>
+            {{ form.hidden_tag() }}
+
+            <div class="mb-4">
+                <label class="form-label">Project Name *</label>
+                {{ form.name(class="form-control", placeholder="e.g. Website Redesign 2024") }}
+                {% for e in form.name.errors %}
+                    <div class="invalid-feedback d-block">{{ e }}</div>
+                {% endfor %}
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Description</label>
+                {{ form.description(class="form-control", placeholder="What is this project about? Goals, deliverables...") }}
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Target Deadline *</label>
+                {{ form.deadline(class="form-control") }}
+                {% for e in form.deadline.errors %}
+                    <div class="invalid-feedback d-block">{{ e }}</div>
+                {% endfor %}
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label" style="margin-bottom: 10px;">Priority Level</label>
+                <div class="priority-grid">
+                    <div class="prio-option">
+                        <input type="radio" name="priority" id="p_low" value="Low">
+                        <label for="p_low"><i class="bi bi-arrow-down-circle"></i> Low</label>
+                    </div>
+                    <div class="prio-option">
+                        <input type="radio" name="priority" id="p_med" value="Medium" checked>
+                        <label for="p_med"><i class="bi bi-dash-circle"></i> Medium</label>
+                    </div>
+                    <div class="prio-option">
+                        <input type="radio" name="priority" id="p_high" value="High">
+                        <label for="p_high"><i class="bi bi-arrow-up-circle"></i> High</label>
+                    </div>
+                    <div class="prio-option">
+                        <input type="radio" name="priority" id="p_crit" value="Critical">
+                        <label for="p_crit"><i class="bi bi-exclamation-circle"></i> Critical</label>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-submit">
+                <i class="bi bi-rocket-takeoff me-1"></i> Launch Project
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

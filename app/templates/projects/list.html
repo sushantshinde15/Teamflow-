@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% block title %}Projects — TeamFlow{% endblock %}
+{% block page_title %}Projects{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <div class="page-heading">
+            Active Projects
+            <span>{{ projects|length }}</span>
+        </div>
+        <p class="page-sub">
+            {% if current_user.role == 'Admin' %}Your workspace projects{% else %}Your assigned projects{% endif %}
+        </p>
+    </div>
+    {% if current_user.role == 'Admin' %}
+    <a href="{{ url_for('projects.new_project') }}" class="btn-create">
+        <i class="bi bi-plus-lg"></i> Create New Project
+    </a>
+    {% endif %}
+</div>
+
+<!-- Active Projects Grid -->
+<div class="projects-grid">
+    {% if projects %}
+        {% for project in projects %}
+        {% set total_tasks = project.tasks|length %}
+        {% set done_tasks  = project.tasks|selectattr('status','equalto','Completed')|list|length %}
+        {% set progress    = ((done_tasks / total_tasks) * 100)|int if total_tasks > 0 else 0 %}
+        {% set days_left   = (project.deadline - today).days if project.deadline else 99 %}
+
+        <div class="project-card priority-{{ project.priority|lower }}">
+            <div class="card-top">
+                <div class="project-name">{{ project.name }}</div>
+                <span class="priority-badge badge-{{ project.priority|lower }}">{{ project.priority }}</span>
+            </div>
+
+            <p class="project-desc">{{ project.description or 'No description provided.' }}</p>
+
+            <div class="progress-row">
+                <span class="progress-label">Progress</span>
+                <span class="progress-pct">{{ progress }}%</span>
+            </div>
+            <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" style="width: {{ progress }}%"></div>
+            </div>
+
+            <div class="card-meta">
+                <span class="meta-item {% if days_left < 7 %}deadline-soon{% endif %}">
+                    <i class="bi bi-calendar3"></i>
+                    {% if project.deadline %}
+                        {% if days_left < 0 %}Overdue
+                        {% elif days_left == 0 %}Due today
+                        {% else %}{{ project.deadline.strftime('%b %d, %Y') }}
+                        {% endif %}
+                    {% else %}No deadline{% endif %}
+                </span>
+                <span class="meta-item">
+                    <i class="bi bi-check2-circle"></i>{{ done_tasks }}/{{ total_tasks }} tasks
+                </span>
+            </div>
+
+            <div class="member-avatars">
+                {% for mem in project.members[:5] %}
+                <div class="m-avatar" title="{{ mem.user.full_name }}">{{ mem.user.full_name[0].upper() }}</div>
+                {% endfor %}
+                {% if not project.members %}
+                <span class="meta-item"><i class="bi bi-people"></i> No members yet</span>
+                {% endif %}
+            </div>
+
+            <div class="card-actions">
+                <a href="{{ url_for('projects.view_project', id=project.id) }}" class="btn-card btn-card-primary">
+                    <i class="bi bi-arrow-right-short"></i> Open
+                </a>
+                {% if current_user.role == 'Admin' %}
+                <a href="{{ url_for('projects.edit_project', id=project.id) }}" class="btn-card">
+                    <i class="bi bi-pencil"></i> Edit
+                </a>
+                <form action="{{ url_for('projects.delete_project', id=project.id) }}" method="POST"
+                      onsubmit="return confirm('Delete this project and all its tasks?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-card btn-card-danger"><i class="bi bi-trash3"></i></button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-icon"><i class="bi bi-folder2-open"></i></div>
+            <div class="empty-title">
+                {% if current_user.role == 'Admin' %}No active projects{% else %}No projects assigned{% endif %}
+            </div>
+            <p class="empty-sub">
+                {% if current_user.role == 'Admin' %}Hit the button above to launch your first project.
+                {% else %}Ask your admin to assign you to a project.{% endif %}
+            </p>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Completed Projects -->
+{% if completed_projects %}
+<div class="section-divider">
+    <div class="section-divider-line"></div>
+    <div class="section-divider-label"><i class="bi bi-check2-all"></i> Completed Projects ({{ completed_projects|length }})</div>
+    <div class="section-divider-line"></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px;">
+    {% for project in completed_projects %}
+    {% set total_tasks = project.tasks|length %}
+    {% set done_tasks  = project.tasks|selectattr('status','equalto','Completed')|list|length %}
+    <div class="completed-card">
+        <div class="completed-icon"><i class="bi bi-check2-all"></i></div>
+        <div>
+            <div class="completed-name">{{ project.name }}</div>
+            <div class="completed-meta">
+                {{ done_tasks }}/{{ total_tasks }} tasks &nbsp;·&nbsp;
+                {% if project.deadline %}Deadline was {{ project.deadline.strftime('%b %d, %Y') }}{% endif %}
+                &nbsp;·&nbsp; {{ project.members|length }} members
+            </div>
+        </div>
+        <a href="{{ url_for('projects.view_project', id=project.id) }}" class="btn-card" style="flex:0; white-space:nowrap; margin-left:8px;">
+            <i class="bi bi-eye"></i> View
+        </a>
+        <span class="completed-badge">Completed</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

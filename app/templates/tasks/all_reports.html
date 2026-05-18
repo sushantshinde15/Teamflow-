@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Reports — TeamFlow{% endblock %}
+{% block page_title %}Reports{% endblock %}
+
+{% block content %}
+
+<div class="page-heading">Task Reports</div>
+<p class="page-sub">
+    {% if current_user.role == 'Admin' %}All submitted task reports across projects{% else %}Your submitted reports{% endif %}
+</p>
+
+<div class="tf-card">
+
+    {% if reports %}
+        {% for report in reports %}
+        {% set task = report.task %}
+        {% set member = report.member %}
+        <div class="report-row">
+            <div class="r-avatar">{{ member.full_name[0].upper() if member else '?' }}</div>
+            <div class="r-content">
+                <div class="r-title">{{ task.title if task else 'Deleted Task' }}</div>
+                <div class="r-summary">{{ report.summary }}</div>
+                <div class="r-meta">
+                    <span class="r-meta-item"><i class="bi bi-person"></i> {{ member.full_name if member else 'Unknown' }}</span>
+                    <span class="r-meta-item"><i class="bi bi-clock"></i> {{ report.time_taken or '—' }} hrs</span>
+                    <span class="r-meta-item"><i class="bi bi-calendar3"></i> {{ report.submitted_at.strftime('%b %d, %Y') }}</span>
+                </div>
+            </div>
+            <a href="{{ url_for('tasks.view_report', id=report.id) }}" class="mini-btn mini-btn-primary" style="flex-shrink:0;">
+                View
+            </a>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state" style="grid-column: auto;">
+            <div class="empty-icon"><i class="bi bi-file-text"></i></div>
+            <div class="empty-title">No reports yet</div>
+            <p class="empty-sub">Reports appear here when members complete tasks.</p>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}
