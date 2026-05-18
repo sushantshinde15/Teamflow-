@@ -9,3 +9,5 @@ python-dotenv
 email-validator
 gunicorn
 Jinja2
+eventlet
+psycopg2-binary
