@@ -8,3 +8,4 @@ Werkzeug
 python-dotenv
 email-validator
 gunicorn
+Jinja2
