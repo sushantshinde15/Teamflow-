@@ -1,150 +1,162 @@
-/* ============================================================
-   TeamFlow — kanban.js
-   Handles: tab switching, drag & drop, task detail modal,
-            file upload (modal + quick), completion confirm,
-            column counts, toast notifications.
-   Loaded via: <script src="{{ url_for('static', filename='js/kanban.js') }}"></script>
-   ============================================================ */
+// kanban.js - main javascript file for the kanban board page
 
-'use strict';
-
-// ══════════════════════════════════════
-//  TAB SWITCHING
-// ══════════════════════════════════════
-
-/**
- * Switch between kanban / analytics / chat / members tabs.
- * @param {string} tabId  - matches the id "tab-{tabId}"
- * @param {HTMLElement} btn - the clicked button element
- */
+// This makes the tab work when you click on it
 function switchTab(tabId, btn) {
-    // hide all panels
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    // deactivate all tab buttons
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
 
-    // show target panel
-    const panel = document.getElementById('tab-' + tabId);
-    if (panel) panel.classList.add('active');
-
-    // activate clicked button
-    if (btn) btn.classList.add('active');
-
-    // lazy-init charts when analytics tab is opened
-    if (tabId === 'analytics' && typeof initCharts === 'function' && !window.chartsInited) {
-        window.chartsInited = true;
-        initCharts();
+    // get all tab panels and remove active from all of them
+    var allPanels = document.querySelectorAll('.tab-panel');
+    for (var i = 0; i < allPanels.length; i++) {
+        allPanels[i].classList.remove('active');
     }
 
-    // scroll chat to bottom when chat tab is opened
+    // also remove active from all the buttons
+    var allBtns = document.querySelectorAll('.tab-btn');
+    for (var j = 0; j < allBtns.length; j++) {
+        allBtns[j].classList.remove('active');
+    }
+
+    // now add active to the right panel
+    var panel = document.getElementById('tab-' + tabId);
+    if (panel != null) {
+        panel.classList.add('active');
+    }
+
+    // add active to the button that was clicked
+    if (btn != null) {
+        btn.classList.add('active');
+    }
+
+    // if analytics tab open the charts
+    if (tabId === 'analytics') {
+        console.log("analytics tab opened");
+        if (typeof startCharts === 'function' && !window.chartsInited) {
+            startCharts();
+            window.chartsInited = true;
+        }
+    }
+
+    // scroll to bottom of chat if chat tab
     if (tabId === 'chat') {
         setTimeout(scrollChatBottom, 50);
     }
 }
 
 
-// ══════════════════════════════════════
-//  DRAG & DROP
-// ══════════════════════════════════════
+// variable to store which card is being dragged
+var draggedId = null;
 
-let draggedId = null;
-
+// this runs when user starts dragging a card
 function onDragStart(e, taskId) {
+    console.log("drag started for task " + taskId);
     draggedId = taskId;
-    const card = document.getElementById('task-' + taskId);
-    if (card) card.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
+    var card = document.getElementById('task-' + taskId);
+    if (card != null) {
+        card.classList.add('dragging');
+    }
 }
 
+// this runs when dragging over a column
 function onDragOver(e) {
     e.preventDefault();
     e.currentTarget.classList.add('drag-over');
 }
 
+// this runs when card leaves the column area
 function onDragLeave(e) {
     e.currentTarget.classList.remove('drag-over');
 }
 
+// this runs when card is dropped into a column
 function onDrop(e, newStatus) {
     e.preventDefault();
+    console.log("Card dropped!");
     e.currentTarget.classList.remove('drag-over');
 
+    // if nothing is being dragged just stop
     if (!draggedId) return;
 
-    const card = document.getElementById('task-' + draggedId);
+    var card = document.getElementById('task-' + draggedId);
     if (!card) return;
 
-    // move card to new column
+    // move the card into the new column
     e.currentTarget.appendChild(card);
     card.classList.remove('dragging');
+
+    // update the count numbers on each column
     updateCounts();
 
-    // special handling for Completed — show confirmation first
+    // if dropped in completed column show a confirm popup first
     if (newStatus === 'Completed') {
         showCompletionModal(draggedId);
         draggedId = null;
         return;
     }
 
-    persistMove(draggedId, newStatus);
+    // send to server
+    updateServer(draggedId, newStatus);
     draggedId = null;
 }
 
-// cleanup after drag ends regardless of where it lands
-document.addEventListener('dragend', () => {
-    document.querySelectorAll('.task-card').forEach(c => c.classList.remove('dragging'));
-    document.querySelectorAll('.kanban-drop-zone').forEach(z => z.classList.remove('drag-over'));
+// cleanup dragging classes when drag ends
+document.addEventListener('dragend', function() {
+    var allCards = document.querySelectorAll('.task-card');
+    for (var i = 0; i < allCards.length; i++) {
+        allCards[i].classList.remove('dragging');
+    }
+    var allZones = document.querySelectorAll('.kanban-drop-zone');
+    for (var j = 0; j < allZones.length; j++) {
+        allZones[j].classList.remove('drag-over');
+    }
 });
 
-/**
- * Recount cards in each column and update the counter badge.
- */
+// Function to update the count badges on each column
 function updateCounts() {
-    document.querySelectorAll('.kanban-drop-zone').forEach(zone => {
-        const status = zone.dataset.status;
-        if (!status) return;
-        const colId = status.toLowerCase().replace(/ /g, '-');
-        const cnt = zone.querySelectorAll('.task-card').length;
-        const el = document.getElementById('cnt-' + colId);
-        if (el) el.textContent = cnt;
-    });
+    var allZones = document.querySelectorAll('.kanban-drop-zone');
+    for (var i = 0; i < allZones.length; i++) {
+        var zone = allZones[i];
+        var status = zone.dataset.status;
+        if (!status) continue;
+        var colId = status.toLowerCase().replace(/ /g, '-');
+        var cnt = zone.querySelectorAll('.task-card').length;
+        var el = document.getElementById('cnt-' + colId);
+        if (el != null) {
+            el.textContent = cnt;
+        }
+    }
 }
 
-/**
- * Send the status change to the server.
- * @param {number} taskId
- * @param {string} newStatus
- */
-function persistMove(taskId, newStatus) {
+// Function to send the new status to the server
+function updateServer(taskId, newStatus) {
+    console.log("Sending task " + taskId + " to status: " + newStatus);
     fetch('/task/move', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task_id: taskId, new_status: newStatus })
     })
-    .then(r => r.json())
-    .then(data => {
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
         if (data.success) {
             showToast('✓ Task moved to ' + newStatus);
         } else {
             showToast('✗ Could not update task', true);
-            // reload so the board reflects real state
-            setTimeout(() => location.reload(), 1500);
+            setTimeout(function() { location.reload(); }, 1500);
         }
     })
-    .catch(() => {
-        showToast('✗ Network error', true);
-        setTimeout(() => location.reload(), 1500);
+    .catch(function() {
+        console.log("error");
+        alert("An error happened");
+        setTimeout(function() { location.reload(); }, 1500);
     });
 }
 
 
-// ══════════════════════════════════════
-//  COMPLETION CONFIRMATION OVERLAY
-// ══════════════════════════════════════
-
+// Function to open the modal when task is dropped in completed column
 function showCompletionModal(taskId) {
-    let overlay = document.getElementById('completeOverlay');
+    console.log("showing completion modal for " + taskId);
+    var overlay = document.getElementById('completeOverlay');
 
+    // create the overlay div if it doesnt exist yet
     if (!overlay) {
         overlay = document.createElement('div');
         overlay.id = 'completeOverlay';
@@ -152,303 +164,362 @@ function showCompletionModal(taskId) {
         document.body.appendChild(overlay);
     }
 
-    overlay.innerHTML = `
-        <div class="confirm-box" style="background:linear-gradient(155deg,rgba(20,20,20,0.99) 0%,rgba(12,12,12,1) 100%);border:1px solid rgba(99,220,100,0.2);border-radius:16px;padding:28px;max-width:400px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.7);">
-            <div style="font-size:2rem;margin-bottom:12px;">✅</div>
-            <div style="font-size:1rem;font-weight:600;color:#eee;margin-bottom:8px;">Mark as Completed?</div>
-            <div style="font-size:0.8rem;color:#777;margin-bottom:22px;line-height:1.5;">
-                This will mark the task as complete.<br>You can still submit a full report from the task detail.
-            </div>
-            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-                <button onclick="submitCompletion(${taskId})"
-                        style="padding:10px 20px;background:linear-gradient(135deg,#4f8fff,#3568dc);border:none;border-radius:9px;color:#fff;font-size:0.84rem;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;display:flex;align-items:center;gap:6px;">
-                    <i class="bi bi-check2-circle"></i> Confirm Complete
-                </button>
-                <button onclick="cancelCompletion(${taskId})"
-                        style="padding:10px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;color:#777;font-size:0.84rem;font-family:'DM Sans',sans-serif;cursor:pointer;">
-                    Cancel
-                </button>
-            </div>
-        </div>`;
+    // put the html inside the overlay
+    overlay.innerHTML = '<div class="confirm-box" style="background:linear-gradient(155deg,rgba(20,20,20,0.99) 0%,rgba(12,12,12,1) 100%);border:1px solid rgba(99,220,100,0.2);border-radius:16px;padding:28px;max-width:400px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.7);">' +
+        '<div style="font-size:2rem;margin-bottom:12px;">✅</div>' +
+        '<div style="font-size:1rem;font-weight:600;color:#eee;margin-bottom:8px;">Mark as Completed?</div>' +
+        '<div style="font-size:0.8rem;color:#777;margin-bottom:22px;line-height:1.5;">' +
+            'This will mark the task as complete.<br>You can still submit a full report from the task detail.' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">' +
+            '<button onclick="submitCompletion(' + taskId + ')"' +
+                    ' style="padding:10px 20px;background:linear-gradient(135deg,#4f8fff,#3568dc);border:none;border-radius:9px;color:#fff;font-size:0.84rem;font-weight:600;font-family:\'DM Sans\',sans-serif;cursor:pointer;display:flex;align-items:center;gap:6px;">' +
+                '<i class="bi bi-check2-circle"></i> Confirm Complete' +
+            '</button>' +
+            '<button onclick="cancelCompletion(' + taskId + ')"' +
+                    ' style="padding:10px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;color:#777;font-size:0.84rem;font-family:\'DM Sans\',sans-serif;cursor:pointer;">' +
+                'Cancel' +
+            '</button>' +
+        '</div>' +
+    '</div>';
 
+    // show the overlay
     overlay.style.display = 'flex';
 }
 
+// this runs when user clicks confirm on the completion modal
 function submitCompletion(taskId) {
-    const overlay = document.getElementById('completeOverlay');
-    if (overlay) overlay.style.display = 'none';
-    persistMove(taskId, 'Completed');
+    console.log("user confirmed task complete: " + taskId);
+    var overlay = document.getElementById('completeOverlay');
+    if (overlay != null) {
+        overlay.style.display = 'none';
+    }
+    updateServer(taskId, 'Completed');
     showToast('✓ Task marked as completed!');
 }
 
+// this runs when user clicks cancel on the completion modal
 function cancelCompletion(taskId) {
-    const overlay = document.getElementById('completeOverlay');
-    if (overlay) overlay.style.display = 'none';
-    // reload to restore the card to its previous column
+    var overlay = document.getElementById('completeOverlay');
+    if (overlay != null) {
+        overlay.style.display = 'none';
+    }
+    // just reload the page its easier
     location.reload();
 }
 
 
-// ══════════════════════════════════════
-//  TASK DETAIL MODAL
-// ══════════════════════════════════════
+// variables for the task detail modal
+var currentTaskId = null;
+var currentUploadUrl = null;
 
-let currentTaskId   = null;
-let currentUploadUrl = null;
-
+// Function to open the task detail modal
 function openTaskModal(taskId) {
-    currentTaskId    = taskId;
+    console.log("Fetching data for task " + taskId);
+    currentTaskId = taskId;
     currentUploadUrl = null;
 
-    const modal = document.getElementById('taskModal');
+    var modal = document.getElementById('taskModal');
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
 
-    // reset to loading state
-    document.getElementById('modalTitle').textContent  = 'Loading...';
+    // set loading text while waiting for data
+    document.getElementById('modalTitle').textContent = 'Loading...';
     document.getElementById('modalStatus').textContent = '—';
-    document.getElementById('modalDesc').textContent   = '...';
+    document.getElementById('modalDesc').textContent = '...';
     document.getElementById('modalAssignee').textContent = '—';
     document.getElementById('modalPriority').textContent = '—';
     document.getElementById('modalDeadline').textContent = '—';
-    document.getElementById('fileList').innerHTML       = '<div style="font-size:0.78rem;color:#666;padding:10px 0;">Loading...</div>';
-    document.getElementById('modalActions').innerHTML   = '';
+    document.getElementById('fileList').innerHTML = '<div style="font-size:0.78rem;color:#666;padding:10px 0;">Loading...</div>';
+    document.getElementById('modalActions').innerHTML = '';
     document.getElementById('uploadSection').style.display = 'none';
 
+    // fetch the task details from server
     fetch('/task/' + taskId + '/detail')
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('modalTitle').textContent    = data.title;
-            document.getElementById('modalStatus').textContent   = data.status;
-            document.getElementById('modalDesc').textContent     = data.description || 'No description provided.';
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            console.log("got task data");
+            // put all the data into the modal fields
+            document.getElementById('modalTitle').textContent = data.title;
+            document.getElementById('modalStatus').textContent = data.status;
+            document.getElementById('modalDesc').textContent = data.description || 'No description provided.';
             document.getElementById('modalAssignee').textContent = data.assignee;
             document.getElementById('modalPriority').textContent = data.priority;
             document.getElementById('modalDeadline').textContent = data.deadline;
 
+            // show the files
             renderFileList(data.files);
 
+            // show upload section if user can upload
             if (data.can_upload) {
                 currentUploadUrl = data.upload_url;
                 document.getElementById('uploadSection').style.display = 'block';
             }
 
-            // build action buttons
-            let actions = '';
+            // build the action buttons html
+            var actions = '';
             if (data.can_upload) {
-                actions += `<a href="${data.report_url}" class="btn-modal-action btn-complete"><i class="bi bi-check2-circle"></i> Mark Complete</a>`;
+                actions = actions + '<a href="' + data.report_url + '" class="btn-modal-action btn-complete"><i class="bi bi-check2-circle"></i> Mark Complete</a>';
             }
             if (data.can_edit) {
-                actions += `<a href="${data.edit_url}" class="btn-modal-action btn-edit-task"><i class="bi bi-pencil"></i> Edit Task</a>`;
+                actions = actions + '<a href="' + data.edit_url + '" class="btn-modal-action btn-edit-task"><i class="bi bi-pencil"></i> Edit Task</a>';
             }
             document.getElementById('modalActions').innerHTML = actions;
         })
-        .catch(() => {
+        .catch(function() {
+            console.log("error");
             document.getElementById('modalTitle').textContent = 'Error loading task';
         });
 }
 
+// Function to show the list of files in the modal
 function renderFileList(files) {
-    const container = document.getElementById('fileList');
+    var container = document.getElementById('fileList');
+
+    // if no files show a message
     if (!files || files.length === 0) {
         container.innerHTML = '<div style="font-size:0.78rem;color:#666;padding:10px 0;">No files attached yet.</div>';
         return;
     }
-    container.innerHTML = files.map(f => `
-        <div class="file-row">
-            <div class="file-icon"><i class="bi bi-file-earmark"></i></div>
-            <div class="file-info">
-                <div class="file-name" title="${escapeHtml(f.original_name)}">${escapeHtml(f.original_name)}</div>
-                <div class="file-meta">${escapeHtml(f.uploaded_by)} · ${f.uploaded_at} · ${f.file_size}</div>
-            </div>
-            <a href="${f.download_url}" class="file-download" download>
-                <i class="bi bi-download"></i> Download
-            </a>
-        </div>
-    `).join('');
+
+    // Start the loop to build file rows
+    var html = '';
+    for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        html = html + '<div class="file-row">' +
+            '<div class="file-icon"><i class="bi bi-file-earmark"></i></div>' +
+            '<div class="file-info">' +
+                '<div class="file-name" title="' + fixText(f.original_name) + '">' + fixText(f.original_name) + '</div>' +
+                '<div class="file-meta">' + fixText(f.uploaded_by) + ' · ' + f.uploaded_at + ' · ' + f.file_size + '</div>' +
+            '</div>' +
+            '<a href="' + f.download_url + '" class="file-download" download>' +
+                '<i class="bi bi-download"></i> Download' +
+            '</a>' +
+        '</div>';
+    }
+    container.innerHTML = html;
 }
 
+// Function to close the modal
 function closeModal() {
-    const modal = document.getElementById('taskModal');
-    if (modal) modal.classList.remove('open');
+    var modal = document.getElementById('taskModal');
+    if (modal != null) {
+        modal.classList.remove('open');
+    }
     document.body.style.overflow = '';
-    currentTaskId    = null;
+    currentTaskId = null;
     currentUploadUrl = null;
 }
 
+// close modal if user clicks outside of it
 function closeModalOutside(e) {
-    if (e.target === document.getElementById('taskModal')) closeModal();
+    if (e.target === document.getElementById('taskModal')) {
+        closeModal();
+    }
 }
 
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeModal();
+// close modal when escape key is pressed
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeModal();
+    }
 });
 
 
-// ══════════════════════════════════════
-//  FILE UPLOAD — MODAL DROP ZONE
-// ══════════════════════════════════════
-
+// this runs when user drags a file over the upload zone
 function uploadDragOver(e) {
     e.preventDefault();
     document.getElementById('uploadZone').classList.add('drag-active');
 }
 
+// remove the highlight when file leaves the zone
 function uploadDragLeave() {
     document.getElementById('uploadZone').classList.remove('drag-active');
 }
 
+// this runs when file is dropped on the upload zone
 function uploadDrop(e) {
     e.preventDefault();
     document.getElementById('uploadZone').classList.remove('drag-active');
     uploadFiles(e.dataTransfer.files);
 }
 
+// this runs when user picks a file with the file picker
 function handleFileSelect(e) {
     uploadFiles(e.target.files);
 }
 
+// Function to upload files to the server
 function uploadFiles(files) {
     if (!files || files.length === 0 || !currentUploadUrl) return;
 
-    const status = document.getElementById('uploadStatus');
-    const bar    = document.getElementById('uploadProgressBar');
-    const fill   = document.getElementById('uploadProgressFill');
+    var status = document.getElementById('uploadStatus');
+    var bar = document.getElementById('uploadProgressBar');
+    var fill = document.getElementById('uploadProgressFill');
+    var done = 0;
+    var total = files.length;
 
-    let done  = 0;
-    const total = files.length;
-    bar.style.display  = 'block';
-    fill.style.width   = '0%';
+    // show the progress bar
+    bar.style.display = 'block';
+    fill.style.width = '0%';
 
-    Array.from(files).forEach(file => {
-        const fd = new FormData();
-        fd.append('file', file);
+    // loop through each file and upload one by one
+    var filesArray = Array.from(files);
+    for (var i = 0; i < filesArray.length; i++) {
+        // use a function to keep the file variable in scope
+        (function(file) {
+            var fd = new FormData();
+            fd.append('file', file);
 
-        // get csrf token from the hidden input that Flask renders in the page
-        const csrfInput = document.querySelector('input[name="csrf_token"]');
-        if (csrfInput) fd.append('csrf_token', csrfInput.value);
+            // also add csrf token if it exists
+            var csrfInput = document.querySelector('input[name="csrf_token"]');
+            if (csrfInput != null) {
+                fd.append('csrf_token', csrfInput.value);
+            }
 
-        if (status) status.textContent = 'Uploading ' + file.name + '...';
+            if (status != null) {
+                status.textContent = 'Uploading ' + file.name + '...';
+            }
 
-        fetch(currentUploadUrl, { method: 'POST', body: fd })
-            .then(r => r.json())
-            .then(data => {
-                done++;
-                fill.style.width = ((done / total) * 100) + '%';
+            console.log("uploading file: " + file.name);
 
-                if (data.success) {
-                    // add new file row without reloading
-                    const listEl = document.getElementById('fileList');
-                    // clear the "no files yet" message if present
-                    if (listEl.querySelector('div[style]')) listEl.innerHTML = '';
+            fetch(currentUploadUrl, { method: 'POST', body: fd })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    done++;
+                    fill.style.width = ((done / total) * 100) + '%';
 
-                    const row = document.createElement('div');
-                    row.className = 'file-row';
-                    row.innerHTML = `
-                        <div class="file-icon"><i class="bi bi-file-earmark"></i></div>
-                        <div class="file-info">
-                            <div class="file-name">${escapeHtml(data.file.original_name)}</div>
-                            <div class="file-meta">${escapeHtml(data.file.uploaded_by)} · ${data.file.uploaded_at} · ${data.file.file_size}</div>
-                        </div>
-                        <a href="${data.file.download_url}" class="file-download" download>
-                            <i class="bi bi-download"></i> Download
-                        </a>`;
-                    listEl.appendChild(row);
+                    if (data.success) {
+                        // add the new file to the list
+                        var listEl = document.getElementById('fileList');
+                        if (listEl.querySelector('div[style]') != null) {
+                            listEl.innerHTML = '';
+                        }
 
-                    if (status) status.textContent = '✓ ' + data.file.original_name + ' uploaded';
-                } else {
-                    if (status) status.textContent = '✗ Error: ' + (data.error || 'Upload failed');
-                }
+                        var row = document.createElement('div');
+                        row.className = 'file-row';
+                        row.innerHTML =
+                            '<div class="file-icon"><i class="bi bi-file-earmark"></i></div>' +
+                            '<div class="file-info">' +
+                                '<div class="file-name">' + fixText(data.file.original_name) + '</div>' +
+                                '<div class="file-meta">' + fixText(data.file.uploaded_by) + ' · ' + data.file.uploaded_at + ' · ' + data.file.file_size + '</div>' +
+                            '</div>' +
+                            '<a href="' + data.file.download_url + '" class="file-download" download>' +
+                                '<i class="bi bi-download"></i> Download' +
+                            '</a>';
+                        listEl.appendChild(row);
 
-                if (done === total) {
-                    setTimeout(() => { bar.style.display = 'none'; }, 1400);
-                }
-            })
-            .catch(() => {
-                if (status) status.textContent = '✗ Upload failed';
-            });
-    });
-}
-
-
-// ══════════════════════════════════════
-//  QUICK UPLOAD (from card button)
-// ══════════════════════════════════════
-
-let quickUploadTaskId = null;
-let quickUploadUrl    = null;
-
-function quickUpload(taskId, uploadUrl) {
-    quickUploadTaskId = taskId;
-    quickUploadUrl    = uploadUrl;
-    const input = document.getElementById('quickUploadInput');
-    if (input) { input.value = ''; input.click(); }
-}
-
-function handleQuickUpload(e) {
-    const files = e.target.files;
-    if (!files || files.length === 0 || !quickUploadUrl) return;
-
-    const csrfInput = document.querySelector('input[name="csrf_token"]');
-
-    Array.from(files).forEach(file => {
-        const fd = new FormData();
-        fd.append('file', file);
-        if (csrfInput) fd.append('csrf_token', csrfInput.value);
-
-        fetch(quickUploadUrl, { method: 'POST', body: fd })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    // update the file count badge on the card
-                    const card = document.getElementById('task-' + quickUploadTaskId);
-                    if (card) {
-                        let badge = card.querySelector('.task-files-badge');
-                        if (badge) {
-                            const cur = parseInt(badge.textContent.replace(/\D/g, '')) || 0;
-                            badge.innerHTML = '<i class="bi bi-paperclip"></i>' + (cur + 1);
-                        } else {
-                            const footer = card.querySelector('.task-card-footer > div:last-child');
-                            if (footer) {
-                                const b = document.createElement('span');
-                                b.className = 'task-files-badge';
-                                b.innerHTML = '<i class="bi bi-paperclip"></i>1';
-                                footer.insertBefore(b, footer.firstChild);
-                            }
+                        if (status != null) {
+                            status.textContent = '✓ ' + data.file.original_name + ' uploaded';
+                        }
+                    } else {
+                        if (status != null) {
+                            status.textContent = '✗ Error: ' + (data.error || 'Upload failed');
                         }
                     }
-                    showToast('✓ ' + data.file.original_name + ' uploaded');
-                } else {
-                    showToast('✗ ' + (data.error || 'Upload failed'), true);
-                }
-            })
-            .catch(() => showToast('✗ Upload failed', true));
-    });
+
+                    // hide the progress bar after all done
+                    if (done === total) {
+                        setTimeout(function() { bar.style.display = 'none'; }, 1400);
+                    }
+                })
+                .catch(function() {
+                    console.log("error");
+                    if (status != null) {
+                        status.textContent = '✗ Upload failed';
+                    }
+                });
+        })(filesArray[i]);
+    }
 }
 
 
-// ══════════════════════════════════════
-//  CHAT
-// ══════════════════════════════════════
+// quick upload from the card not the modal
+var quickUploadTaskId = null;
+var quickUploadUrl = null;
 
+// Function to trigger file picker for quick upload
+function quickUpload(taskId, uploadUrl) {
+    quickUploadTaskId = taskId;
+    quickUploadUrl = uploadUrl;
+    var input = document.getElementById('quickUploadInput');
+    if (input != null) {
+        input.value = '';
+        input.click();
+    }
+}
+
+// this runs when quick upload file is selected
+function handleQuickUpload(e) {
+    var files = e.target.files;
+    if (!files || files.length === 0 || !quickUploadUrl) return;
+
+    var csrfInput = document.querySelector('input[name="csrf_token"]');
+
+    // loop through files and upload
+    var filesArray = Array.from(files);
+    for (var i = 0; i < filesArray.length; i++) {
+        (function(file) {
+            var fd = new FormData();
+            fd.append('file', file);
+            if (csrfInput != null) {
+                fd.append('csrf_token', csrfInput.value);
+            }
+
+            console.log("quick uploading: " + file.name);
+
+            fetch(quickUploadUrl, { method: 'POST', body: fd })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        // update the file badge on the card
+                        var card = document.getElementById('task-' + quickUploadTaskId);
+                        if (card != null) {
+                            var badge = card.querySelector('.task-files-badge');
+                            if (badge != null) {
+                                var cur = parseInt(badge.textContent.replace(/\D/g, '')) || 0;
+                                badge.innerHTML = '<i class="bi bi-paperclip"></i>' + (cur + 1);
+                            } else {
+                                var footer = card.querySelector('.task-card-footer > div:last-child');
+                                if (footer != null) {
+                                    var b = document.createElement('span');
+                                    b.className = 'task-files-badge';
+                                    b.innerHTML = '<i class="bi bi-paperclip"></i>1';
+                                    footer.insertBefore(b, footer.firstChild);
+                                }
+                            }
+                        }
+                        showToast('✓ ' + data.file.original_name + ' uploaded');
+                    } else {
+                        showToast('✗ ' + (data.error || 'Upload failed'), true);
+                    }
+                })
+                .catch(function() {
+                    console.log("error");
+                    alert("An error happened");
+                });
+        })(filesArray[i]);
+    }
+}
+
+
+// scroll to the bottom of the chat area
 function scrollChatBottom() {
-    const el = document.getElementById('chatArea');
-    if (el) el.scrollTop = el.scrollHeight;
+    var el = document.getElementById('chatArea');
+    if (el != null) {
+        el.scrollTop = el.scrollHeight;
+    }
 }
 
 
-// ══════════════════════════════════════
-//  TOAST NOTIFICATION
-// ══════════════════════════════════════
+// variable for the toast timer
+var toastTimer = null;
 
-let toastTimer = null;
-
-/**
- * Show a small toast at the bottom-right of the screen.
- * @param {string}  msg      - message text
- * @param {boolean} isError  - red style if true, green if false
- */
+// Function to show a toast message at the bottom
 function showToast(msg, isError) {
-    let t = document.getElementById('kanbanToast');
+    var t = document.getElementById('kanbanToast');
+
+    // create the toast element if it doesnt exist
     if (!t) {
         t = document.createElement('div');
         t.id = 'kanbanToast';
@@ -456,26 +527,46 @@ function showToast(msg, isError) {
     }
 
     t.textContent = msg;
-    t.style.background = isError ? 'rgba(220,53,69,0.18)'  : 'rgba(40,167,69,0.18)';
-    t.style.color      = isError ? '#e07070'               : '#5fbe82';
-    t.style.border     = isError ? '1px solid rgba(220,53,69,0.3)' : '1px solid rgba(40,167,69,0.3)';
-    t.style.opacity    = '1';
 
+    // change color depending on if its an error or not
+    if (isError) {
+        t.style.background = 'rgba(220,53,69,0.18)';
+        t.style.color = '#e07070';
+        t.style.border = '1px solid rgba(220,53,69,0.3)';
+    } else {
+        t.style.background = 'rgba(40,167,69,0.18)';
+        t.style.color = '#5fbe82';
+        t.style.border = '1px solid rgba(40,167,69,0.3)';
+    }
+
+    t.style.opacity = '1';
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+    // hide after 3 seconds
+    toastTimer = setTimeout(function() { t.style.opacity = '0'; }, 3000);
 }
 
 
-// ══════════════════════════════════════
-//  UTILITY
-// ══════════════════════════════════════
-
-function escapeHtml(str) {
+// this fixes special characters in text so html doesnt break
+function fixText(str) {
     if (!str) return '';
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+    var result = str;
+    result = result.replace(/&/g, '&amp;');
+    result = result.replace(/</g, '&lt;');
+    result = result.replace(/>/g, '&gt;');
+    result = result.replace(/"/g, '&quot;');
+    result = result.replace(/'/g, '&#039;');
+    return result;
+}
+
+// also keep old name just in case something else calls it
+function escapeHtml(str) {
+    return fixText(str);
+}
+
+// this starts the charts on the analytics tab
+function startCharts() {
+    console.log("starting charts");
+    if (typeof initCharts === 'function') {
+        initCharts();
+    }
 }
